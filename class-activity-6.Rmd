@@ -10,8 +10,20 @@ output: html_document
 DF1 <- read.csv("HUDK405019-clustering.csv", header = TRUE)
 
 #Convert the index numbers of the data fram into the student names.
-  
+library(tidyr)
+library(dplyr)
+DF1 <- tidyr::unite(DF1, Name, First.Name, Last.Name, sep = " ")
+rownames(DF1) <- DF1$Name
+DF1 <- DF1[,-1]
+colnames(DF1) <- c("month", "siblings", "sport", "miles", "Android", "movies", "pets", "people", "cook", "class", "state", "city", "latitude", "longitude")
 #Wrangle data using dplyr to include only the numerical values.
+#DF1 <- DF1 %>% mutate_all(as.character) %>% mutate_all(as.numeric)
+
+DF1$miles <- gsub("[[:alpha:]]", "", DF1$miles)
+
+DF2 <- as.data.frame(lapply(DF1[, 1:11], gsub, pattern="[[:alpha:]]", replacement = NA), row.names = rownames(DF1))
+DF2 <- DF2%>%mutate_all(as.character)%>%mutate_all(as.numeric)
+DF2 <- na.omit(DF2)
 
 #Scale the data so that no variable has undue influence
 
@@ -27,11 +39,16 @@ DF2 <- scale(DF2)
 #install.packages("rgdal")
 #library(ggmap)
 #library(tmaptools)
-
+##install.packages("ggmap")
+##install.packages("rgdal")
+##library(ggmap)
+##library(tmaptools)
 #Request lattitude and longitude from Google Maps API
 #DF2 <- geocode(as.character(DF2$Q1_1), output = "latlon", source = "dsk")
-```
 
+##DF2 <- geocode(as.character(DF2$Q1_1), output = "latlon", source = "dsk")
+
+```
 Now we will run the K-means clustering algorithm we talked about in class. 
 1) The algorithm starts by randomly choosing some starting values 
 2) Associates all observations near to those values with them
@@ -45,33 +62,74 @@ Notice that in this case we have 10 variables and in class we only had 2. It is 
 Also, we need to choose the number of clusters we think are in the data. We will start with 4.
 
 ```{r}
-
-fit <- kmeans(DF2, 1) 
+fit <- kmeans(DF2, 4) 
 
 #We have created an object called "fit" that contains all the details of our clustering including which observations belong to each cluster.
 
 #We can access the list of clusters by typing "fit$cluster", the top row corresponds to the original order the rows were in. Notice we have deleted some rows.
 
-fit$cluster yay
+fit$cluster
 
 #We can also attach these clusters to te original dataframe by using the "data.frame" command to create a new data frame called K4.
 
 DF3 <- data.frame(DF2, fit$cluster)
 
 #Have a look at the DF3 dataframe. Lets change the names of the variables to make it more convenient with the names() command.
+##names(DF3) <- c("1", "2", "3", "4", "5", "cluster") 
 
-names(DF3) <- c("1", "2", "3", "4", "5", "cluster") #c() stands for concatonate and it creates a vector of anything, in this case a vector of names.
+#c() stands for concatonate and it creates a vector of anything, in this case a vector of names.
 
 ```
 
 # Visualize your clusters in ggplot
 ```{r}
-#Create a scatterplot that plots location of each student and colors the points according to their cluster 
+#Create a scatterplot that plots location of each student and colors the points according to their cluster
+library(ggplot2)
+DF1$latitude <- as.character(DF1$latitude)
+DF1$longitude <- as.character(DF1$longitude)
+for (i in 1:nrow(DF1)){
+    DF1[i,13]<-ifelse(grepl(pattern="S|s",DF1[i,13]),paste("-",DF1[i,13],sep=""),DF1[i,13])
+}
+
+for (i in 1:nrow(DF1)){
+    DF1[i,14]<-ifelse(grepl(pattern="E|e",DF1[i,14]),paste("-",DF1[i,14],sep=""),DF1[i,14])
+}
+
+DF1$latitude <- gsub("[[:alpha:]]", "", DF1$latitude)
+DF1$latitude <- gsub('00"', "", DF1$latitude, fixed = TRUE)
+DF1$latitude <- gsub(",| |118.2437°|121.4737°", "", DF1$latitude)
+DF1$latitude <- gsub("-44°08'", "", DF1$latitude, fixed = TRUE)
+
+
+DF1$longitude <- gsub("[[:alpha:]]", "", DF1$longitude)
+DF1$longitude <- gsub('24"', "", DF1$longitude, fixed = TRUE)
+DF1$longitude <- gsub(",| |34.0522°|31.2304°", "", DF1$longitude)
+DF1$longitude <- gsub("-88°58'", "", DF1$longitude, fixed = TRUE)
+
+plot(DF1$longitude, DF1$latitude, type = "p", col= DF3$fit.cluster, xlab = "longitude", ylab = "latitude")
+
 ```
 
 # Can you group students from the classes data set in Assignment 2 using K-modes?
 
 ```{r}
 
+library(klaR)
+class <- as.data.frame(read.csv("hudk4050-classes.csv", header = TRUE))
+library(dplyr)
+library(tidyr)
+class <- dplyr::select(class, Q8, Q9, Q1, Q3, Q4, Q5, Q6, Q7)
+names(class) <- c("First Name","Last Name", "Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6")
+class <- class[-c(1,2,36),]
+class <- tidyr::unite(class, "student", 1:2, sep = " ")
+A2 <- tidyr::gather(class, "order", "name", 2:7)
+A2$name <- gsub(" |-", "", A2$name)
+A2 <- A2[,-2]
+A2 <- filter(A2, !A2$name == "")
+A2$take <- "Yes"
+A2 <- tidyr::spread(A2, name, take, fill = "No")
+
+km <- kmodes(A2, 4, iter.max = 5, weighted = FALSE)
+class$cluster <- km$cluster
 ```
 
